@@ -45,11 +45,11 @@ test_platform_odo_real_imu_interface_Chinese_GBK_ANSI.m
    改为由四环轨迹函数给出：
        [posRef, vnRef, attRef, trueEnu0] = fourth_ring_route_state(route, 0);
 
-   仿真总时长不再由一圈路线长度决定，而是由独立参数 simHours 控制。当前默认：
-       simHours = 24;
-       simTime = simHours*3600;
+   仿真总时长按实际走完一圈设置：
+       simTime = route.lapTime;
+       route.simLapCount = 1;
 
-   一圈时间仍保存在 route.lapTime 中。轨迹函数使用 mod(v*t, route.lapDistance)，因此仿真超过一圈后会自动继续绕四环循环运动。
+   一圈距离保存在 route.lapDistance 中，当前约 61.9 km。按 15 m/s 行驶时，一圈时间约 4126 s，即 1.15 h，所以图 1 的横轴只有约 1.2 h 属于正常结果。
 
 4. 主循环中的参考真值
    每个导航更新周期中，不再用固定速度推进参考位置，而是直接调用：
@@ -196,7 +196,7 @@ test_platform_odo_real_imu_interface_Chinese_GBK_ANSI.m
 运行 test_platform_odo_real_imu_interface_Chinese_GBK_ANSI.m 后生成：
 
 1. platform_odo_fourth_ring_sim_results.mat
-   保存 result_static，包括 route 和 traj 字段；route.simHours、route.simTime 和 route.simLapCount 记录本次仿真时长和圈数。
+   保存 result_static，包括 route 和 traj 字段；route.simTime、route.simHours 和 route.simLapCount 记录本次仿真时长和圈数。
 
 2. real_imu_interface_fourth_ring_actual_vehicle_trajectory.png
    保存实际载体运行轨迹图。

@@ -68,13 +68,13 @@ function result = platform_odo_real_imu_core(sceneName, vnRef, attb0, seed)
 % 数据坐标轴到导航平台坐标轴的转换关系：[x_data,y_data,z_data] -> [x_platform,z_platform,y_platform]。
 % 这样可将数据第 2 轴上测得的正向重力映射到平台第 3 轴竖直方向。
     imuCfg.CdataToPlatform = [1 0 0; 0 0 -1; 0 1 0];
-% 仿真总时长，单位为秒。当前为 3600 s，也就是 1 小时；若改为 24*3600 就是一整天。
+% 四环矩形路线仿真总时长按实际走完一圈设置。
+% 一圈长度约 61.9 km，速度 15 m/s 时总时长约 1.15 h。
     route = make_fourth_ring_route(39.907456*arcdeg, 116.273987*arcdeg, 50, 15, 300);
-    simHours = 24;
-    simTime = simHours*3600;
+    simTime = route.lapTime;
     route.simTime = simTime;
-    route.simHours = simHours;
-    route.simLapCount = simTime/route.lapTime;
+    route.simHours = simTime/3600;
+    route.simLapCount = 1;
 % 参考平台姿态四元数 qnpRef：单位四元数表示平台坐标系与导航系完全重合。
     [posRef, vnRef, attRef, trueEnu0] = fourth_ring_route_state(route, 0);
     qnpRef = [1; 0; 0; 0];
@@ -82,9 +82,9 @@ function result = platform_odo_real_imu_core(sceneName, vnRef, attb0, seed)
     qnp = qnpRef;
 % 把载体相对导航系的姿态角 attb0 转成四元数 qnb0。
     qnb0 = a2qua(attRef);
-    qnp = qnb0;
 % Cbn0 是导航系速度投影到载体系/里程计坐标系的方向余弦矩阵，用作里程计观测矩阵。
-    Cbn0 = q2mat(qnp)';
+% 车辆航向只用于里程计坐标分解，不改变平台姿态 qnp 的参考基准。
+    Cbn0 = q2mat(qnb0)';
 % 里程计相对于载体/车体系的安装误差角。
 % 若设为 zeros(3,1)，则表示不考虑该安装误差。
     odoInstallErr = zeros(3,1);
@@ -155,7 +155,7 @@ function result = platform_odo_real_imu_core(sceneName, vnRef, attb0, seed)
                 gyroExpectedPlatform = q2mat(qnp)'*eth0.wnie;
                 imuCfg.gyroBiasRadPerSec = mean(gyroPlatform,1).' - gyroExpectedPlatform;
                 imuReader.cfg = imuCfg;
-                fprintf('Estimated gyro residual bias [rad/s]: [%.9g %.9g %.9g]\\n', imuCfg.gyroBiasRadPerSec);
+                fprintf('Estimated gyro residual bias [rad/s]: [%.9g %.9g %.9g]\n', imuCfg.gyroBiasRadPerSec);
             end
         end
     end
@@ -503,7 +503,7 @@ end
 function print_platform_odo_mse(result)
     mse = result.mse;
 % 每一行依次输出东、北、天或 x、y、z 三个通道的均方误差。
-    fprintf('\n===== %s 一天仿真的均方误差 =====\n', result.sceneName);
+    fprintf('\n===== %s 四环一圈仿真的均方误差 =====\n', result.sceneName);
     fprintf('姿态误差 MSE [E N U] ((arcmin)^2):             %.6g  %.6g  %.6g\n', mse.att_arcmin2);
     fprintf('速度误差 MSE [E N U] ((m/s)^2):                %.6g  %.6g  %.6g\n', mse.vel_mps2);
     fprintf('位置误差 MSE [E N U] (m^2):                    %.6g  %.6g  %.6g\n', mse.pos_m2);
