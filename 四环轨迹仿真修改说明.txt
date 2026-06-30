@@ -1,0 +1,225 @@
+四环轨迹仿真修改说明
+====================
+
+一、修改对象
+------------
+本次修改基于：
+test_platform_odo_real_imu_interface_Chinese_GBK_ANSI.m
+
+该程序原来主要面向真实 IMU 数据接口，本次按要求改为默认采用仿真模式：
+    imuCfg.useRealData = false;
+
+程序保留原来的真实 IMU MAT/text 读取函数，后续如果需要仍可切回真实数据模式。
+
+
+二、地理基准点
+--------------
+四环简化轨迹的锚点选在五棵松附近，采用五棵松站/五棵松桥一带坐标：
+    纬度 lat = 39.907456 deg
+    经度 lon = 116.273987 deg
+    高度 h   = 50 m
+
+程序中对应代码：
+    route = make_fourth_ring_route(39.907456*arcdeg, 116.273987*arcdeg, 50, 15, 300);
+
+其中 15 为载体速度 m/s，300 为四角转弯半径 m。
+
+
+三、主要改动位置
+----------------
+1. 主脚本入口
+   原来的静基座/真实 IMU 场景改为四环矩形仿真场景：
+       result_static = platform_odo_real_imu_core('Beijing 4th-ring rectangle simulation', ...);
+       save('platform_odo_fourth_ring_sim_results.mat', 'result_static');
+
+2. IMU 模式选择
+   将：
+       imuCfg.useRealData = true;
+   改为：
+       imuCfg.useRealData = false;
+   这样程序进入仿真 IMU 分支，由轨迹真值生成理想 IMU 增量，再叠加传感器误差。
+
+3. 初始位置和仿真时长
+   删除原来的西安静基座初始位置：
+       posRef = [34*arcdeg; 108*arcdeg; 100];
+   改为由四环轨迹函数给出：
+       [posRef, vnRef, attRef, trueEnu0] = fourth_ring_route_state(route, 0);
+
+   仿真总时长由一圈路线长度和速度决定：
+       simTime = route.lapTime;
+
+4. 主循环中的参考真值
+   每个导航更新周期中，不再用固定速度推进参考位置，而是直接调用：
+       [posRefNext, vnRefNext, attRef, trueEnuNext] = fourth_ring_route_state(route, t);
+
+   这样参考位置、参考速度、载体航向和 ENU 真值都来自同一个四环轨迹模型。
+
+5. IMU 仿真输入
+   旧代码静基座写法：
+       vm = repmat((-ethRef.gcc*ts)', nn, 1);
+
+   现在加入参考加速度：
+       accRef = (vnRefNext - vnRefPrev)/nts;
+       vm = repmat(((accRef - ethRef.gcc)*ts)', nn, 1);
+
+   含义是：载体转弯或速度扰动时，参考速度会变化，速度差除以时间得到导航系加速度，再和重力/地球项一起构造理想加速度计速度增量。
+
+6. 里程计仿真
+   里程计输出改为使用当前车辆航向矩阵：
+       CbnOdo = Cbo*q2mat(a2qua(attRef))';
+       odo = CbnOdo*vnRefNext + rk.*randn(3,1);
+
+   这样直线和转弯时，里程计坐标系会随车头方向变化。
+
+7. 轨迹保存
+   新增保存量：
+       result.route
+       result.traj.time
+       result.traj.trueEnu
+       result.traj.navEnu
+       result.traj.truePos
+       result.traj.navPos
+       result.traj.trueVn
+
+   其中 trueEnu/truePos/trueVn 是实际载体真值轨迹，navEnu/navPos 是组合导航解算轨迹。
+
+8. 轨迹图
+   新增函数：
+       plot_fourth_ring_route(result)
+
+   输出图片：
+       real_imu_interface_fourth_ring_actual_vehicle_trajectory.png
+
+   左图为完整四环实际载体轨迹，右图为起点后约 1.5 km 的局部放大，用于显示米级横向扰动。
+
+
+四、四环矩形轨迹建模原理
+------------------------
+1. 坐标系
+   轨迹先在五棵松锚点附近建立局部 ENU 坐标系：
+       E：向东，单位 m
+       N：向北，单位 m
+       U：向上，单位 m
+
+   最后通过 enu_to_pos() 将局部 ENU 转换为经纬高：
+       lat = lat0 + north/(RM+h)
+       lon = lon0 + east/(cos(lat0)*(RN+h))
+       h   = h0 + up
+
+2. 矩形尺寸
+   简化后的四环为：
+       东西宽度 width  = 19000 m
+       南北高度 height = 11000 m
+
+3. 起点
+   起点位于西线从北向南 70% 的位置。
+   在局部模型中，西线南北高度为 11000 m，因此起点距北端：
+       0.70 * 11000 = 7700 m
+   等价于距南端：
+       startY = 11000 * (1 - 0.70) = 3300 m
+
+   程序把起点平移为 ENU 原点，因此图中起点为 (0, 0)。
+
+4. 运动方向
+   载体从西线起点开始，先向南运动，随后经过西南角进入南线向东，整体为逆时针运动。
+
+5. 四角 90° 转弯
+   每个角不再用尖角连接，而是用半径 R 的四分之一圆弧连接相邻直线段。
+   当前默认：
+       R = 300 m
+
+   每个 90° 转弯圆弧长度为：
+       L_arc = (pi/2) * R
+
+   这部分转弯距离在 19 km 和 11 km 的直线距离之外额外增加。
+
+6. 一圈总距离
+   程序中的段长数组为：
+       [起点到西南角直线,
+        西南角圆弧,
+        南线 19 km,
+        东南角圆弧,
+        东线 11 km,
+        东北角圆弧,
+        北线 19 km,
+        西北角圆弧,
+        西线回到起点直线]
+
+   总距离为：
+       route.lapDistance = sum(segLen)
+
+   使用 R=300 m 时：
+       四个圆弧额外距离 = 4 * (pi/2) * 300 ≈ 1884.96 m
+       一圈总距离 ≈ 60000 + 1884.96 = 61884.96 m
+
+7. 按弧长推进
+   设载体速度为 v，仿真时间为 t，则累计弧长：
+       s = mod(v*t, route.lapDistance)
+
+   函数 fourth_ring_local_state(route, s) 根据 s 落在哪个直线段或圆弧段，计算对应的 ENU 位置和速度。
+
+
+五、扰动模型
+------------
+为了让实际载体轨迹不是绝对光滑的几何线，程序又加入了实际行驶扰动：
+
+1. 横向扰动
+   沿道路法向加入米级摆动：
+       dLat = sum(A_i * sin(2*pi*s/lambda_i + phase_i))
+
+   默认幅值：
+       route.disturb.lateralAmp = [0.8, 0.25, 0.08] m
+
+2. 沿程扰动
+   在弧长方向加入低频位置扰动：
+       dAlong = sum(A_i * sin(2*pi*s/lambda_i + phase_i))
+
+   默认幅值：
+       route.disturb.alongAmp = [1.5, 0.3] m
+
+3. 实际轨迹
+   实际载体 ENU 位置由：
+       理想中心线位置 + 法向横向扰动
+   得到。
+
+   实际速度通过对扰动后位置按弧长做中心差分得到：
+       vn = v * (enu(s+ds) - enu(s-ds)) / (2*ds)
+
+   这样速度方向和横向扰动后的曲线一致。
+
+
+六、输出文件
+------------
+运行 test_platform_odo_real_imu_interface_Chinese_GBK_ANSI.m 后生成：
+
+1. platform_odo_fourth_ring_sim_results.mat
+   保存 result_static，包括 route 和 traj 字段。
+
+2. real_imu_interface_fourth_ring_actual_vehicle_trajectory.png
+   保存实际载体运行轨迹图。
+
+
+七、可调参数
+------------
+主要参数集中在 make_fourth_ring_route() 中：
+
+1. 矩形尺寸：
+       width = 19000;
+       height = 11000;
+
+2. 起点比例：
+       startFromNorth = 0.70;
+
+3. 转弯半径：
+       turnRadius = 300;
+
+4. 车速：
+       speed = 15;
+
+5. 横向扰动强度：
+       route.disturb.lateralAmp
+
+6. 沿程扰动强度：
+       route.disturb.alongAmp
+
+如果希望轨迹更平滑，可减小 lateralAmp 和 alongAmp；如果希望更接近道路行驶中的轻微摆动，可保持当前米级扰动。
