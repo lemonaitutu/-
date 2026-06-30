@@ -226,3 +226,10 @@ test_platform_odo_real_imu_interface_Chinese_GBK_ANSI.m
        route.disturb.alongAmp
 
 如果希望轨迹更平滑，可减小 lateralAmp 和 alongAmp；如果希望更接近道路行驶中的轻微摆动，可保持当前米级扰动。
+
+
+补充修正：图 1 的位置误差现已按 ENU 顺序保存和绘制：
+    dE = (lon - lonRef)*Re*cos(latRef)
+    dN = (lat - latRef)*Re
+    dU = h - hRef
+这样第 4 个子图的图例 dE、dN、dU 与实际曲线顺序一致。

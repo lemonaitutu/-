@@ -271,11 +271,11 @@ function result = platform_odo_real_imu_core(sceneName, vnRef, attb0, seed)
 % （2）仿真误差计算
 % 注意：这部分需要真实参考值 posRef/vnRef/qnpRef，所以只用于仿真验证。
 % 如果采用真实数据，主控嵌入式软件没有真实值可相减，本段通常不进入实装代码。
-% 经纬高误差换算成米：纬度误差乘地球半径，经度误差还要乘 cos(纬度)，高度误差直接相减。
+% 经纬高误差换算成米，并按 ENU 顺序保存：经度差为东向，纬度差为北向，高度差为天向。
         posRef = posRefNext;
         vnRef = vnRefNext;
-        dpos = [(pos(1)-posRef(1))*Re;
-                (pos(2)-posRef(2))*Re*cos(posRef(1));
+        dpos = [(pos(2)-posRef(2))*Re*cos(posRef(1));
+                (pos(1)-posRef(1))*Re;
                  pos(3)-posRef(3)];
 % 保存真实误差：姿态误差由两个四元数求小角度误差，速度/位置直接与参考值相减。
         err(kk,:) = [qq2phi(qnp, qnpRef); vn-vnRef; dpos; t]';
@@ -283,7 +283,7 @@ function result = platform_odo_real_imu_core(sceneName, vnRef, attb0, seed)
 % 保存滤波器内部量：前 15 列为状态估计，后 15 列为协方差对角线，最后一列为时间。
         xkpk(kk,:) = [kf.Xk; diag(kf.Pk); t]';
         trueEnu = trueEnuNext;
-        navEnu = trueEnu + [dpos(2); dpos(1); dpos(3)];
+        navEnu = trueEnu + dpos;
         trajTime(kk) = t;
         trajTrueEnu(kk,:) = trueEnu';
         trajNavEnu(kk,:) = navEnu';
