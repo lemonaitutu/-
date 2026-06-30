@@ -70,7 +70,11 @@ function result = platform_odo_real_imu_core(sceneName, vnRef, attb0, seed)
     imuCfg.CdataToPlatform = [1 0 0; 0 0 -1; 0 1 0];
 % 仿真总时长，单位为秒。当前为 3600 s，也就是 1 小时；若改为 24*3600 就是一整天。
     route = make_fourth_ring_route(39.907456*arcdeg, 116.273987*arcdeg, 50, 15, 300);
-    simTime = route.lapTime;
+    simHours = 24;
+    simTime = simHours*3600;
+    route.simTime = simTime;
+    route.simHours = simHours;
+    route.simLapCount = simTime/route.lapTime;
 % 参考平台姿态四元数 qnpRef：单位四元数表示平台坐标系与导航系完全重合。
     [posRef, vnRef, attRef, trueEnu0] = fourth_ring_route_state(route, 0);
     qnpRef = [1; 0; 0; 0];
@@ -636,8 +640,10 @@ function plot_fourth_ring_route(result)
     ylabel('North / m');
     title('Zoomed actual motion disturbance');
     legend('Ideal centerline', 'Actual disturbed trajectory', 'Location', 'best');
-    sgtitle(sprintf('Fourth-ring vehicle trajectory, R=%.0f m, v=%.1f m/s', ...
-            route.turnRadius, route.speed));
+    totalHours = result.traj.time(end)/3600;
+    lapCount = result.traj.time(end)*route.speed/route.lapDistance;
+    sgtitle(sprintf('Fourth-ring vehicle trajectory, R=%.0f m, v=%.1f m/s, %.1f h / %.2f laps', ...
+            route.turnRadius, route.speed, totalHours, lapCount));
     exportgraphics(gcf, 'real_imu_interface_fourth_ring_actual_vehicle_trajectory.png', 'Resolution', 200);
 end
 function att = q2att321(q)

@@ -1,4 +1,4 @@
-四环轨迹仿真修改说明
+﻿四环轨迹仿真修改说明
 ====================
 
 一、修改对象
@@ -45,8 +45,11 @@ test_platform_odo_real_imu_interface_Chinese_GBK_ANSI.m
    改为由四环轨迹函数给出：
        [posRef, vnRef, attRef, trueEnu0] = fourth_ring_route_state(route, 0);
 
-   仿真总时长由一圈路线长度和速度决定：
-       simTime = route.lapTime;
+   仿真总时长不再由一圈路线长度决定，而是由独立参数 simHours 控制。当前默认：
+       simHours = 24;
+       simTime = simHours*3600;
+
+   一圈时间仍保存在 route.lapTime 中。轨迹函数使用 mod(v*t, route.lapDistance)，因此仿真超过一圈后会自动继续绕四环循环运动。
 
 4. 主循环中的参考真值
    每个导航更新周期中，不再用固定速度推进参考位置，而是直接调用：
@@ -193,7 +196,7 @@ test_platform_odo_real_imu_interface_Chinese_GBK_ANSI.m
 运行 test_platform_odo_real_imu_interface_Chinese_GBK_ANSI.m 后生成：
 
 1. platform_odo_fourth_ring_sim_results.mat
-   保存 result_static，包括 route 和 traj 字段。
+   保存 result_static，包括 route 和 traj 字段；route.simHours、route.simTime 和 route.simLapCount 记录本次仿真时长和圈数。
 
 2. real_imu_interface_fourth_ring_actual_vehicle_trajectory.png
    保存实际载体运行轨迹图。
